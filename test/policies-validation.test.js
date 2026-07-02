@@ -72,6 +72,31 @@ describe("policies preset validation", () => {
       }
     });
 
+    it("rejects a sibling dir that shares the presets-dir name prefix", () => {
+      // The guard compares against `PRESETS_DIR + path.sep`. A sibling directory
+      // like `presets-evil/` shares the PRESETS_DIR *string* prefix but not the
+      // path boundary — a regression to a bare `startsWith(PRESETS_DIR)` would
+      // let `../presets-evil/leak` through. Plant a file there and prove it can't
+      // be read.
+      const siblingDir = policies.PRESETS_DIR + "-evil";
+      const secretPath = path.join(siblingDir, "leak.yaml");
+      let planted = false;
+      try {
+        fs.mkdirSync(siblingDir, { recursive: true });
+        fs.writeFileSync(secretPath, "host: '*'\n");
+        planted = true;
+        expect(policies.loadPreset(`../${path.basename(siblingDir)}/leak`)).toBe(null);
+      } finally {
+        if (planted) {
+          try {
+            fs.rmSync(siblingDir, { recursive: true, force: true });
+          } catch {
+            /* ignore cleanup failure */
+          }
+        }
+      }
+    });
+
     it("still loads a legitimate preset whose name normalizes back inside the dir", () => {
       // A name containing "/.." that resolves back to a real preset is allowed
       // because the resolved path is still within the presets dir.
@@ -206,6 +231,8 @@ describe("policies preset validation", () => {
       // the text fallback rather than being interpreted as a permissive rule.
       expect(merged).toContain("version: 1");
       expect(merged).toContain("network_policies:");
+      // The malformed text must NOT be promoted into a parseable allow-all rule.
+      expect(merged).not.toMatch(/host:\s*['"]?\*/);
     });
 
     it("handles duplicate keys inside preset entries via the text fallback without throwing", () => {
@@ -217,6 +244,8 @@ describe("policies preset validation", () => {
         merged = policies.mergePresetIntoPolicy("version: 1\nnetwork_policies: {}", dupEntries);
       }).not.toThrow();
       expect(merged).toContain("version: 1");
+      // Duplicate-key garbage must not become an allow-all rule either.
+      expect(merged).not.toMatch(/host:\s*['"]?\*/);
     });
 
     it("replaces a legacy array-shaped network_policies with the structured preset object", () => {

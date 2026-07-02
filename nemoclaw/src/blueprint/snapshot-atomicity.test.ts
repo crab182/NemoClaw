@@ -76,6 +76,11 @@ vi.mock("node:fs", async (importOriginal) => {
         }
       }
     }),
+    rmSync: vi.fn((p: string) => {
+      for (const k of [...store.keys()]) {
+        if (k === p || k.startsWith(p + "/")) store.delete(k);
+      }
+    }),
     readdirSync: (p: string, opts?: { withFileTypes?: boolean }) => {
       const prefix = p.endsWith("/") ? p : p + "/";
       const childTypes = new Map<string, "file" | "dir">();
@@ -184,6 +189,8 @@ describe("snapshot atomicity / safety", () => {
       const { cpSync } = vi.mocked(fsMod);
       // Simulate a copy that writes one file then dies partway through.
       cpSync.mockImplementationOnce((_src: string, dest: string) => {
+        // Real cpSync creates the target dir, writes a child, then dies.
+        store.set(dest, { type: "dir" });
         store.set(`${dest}/partial.json`, { type: "file", content: "half" });
         throw new Error("EIO: crashed after first file");
       });
@@ -191,19 +198,14 @@ describe("snapshot atomicity / safety", () => {
       const ok = rollbackFromSnapshot(SNAP);
       expect(ok).toBe(false);
 
-      // The recovery path only runs when archivePath !== null. With no
-      // original there is no archive, so the code leaves whatever cpSync
-      // managed to write. We assert the ACTUAL behavior: the function
-      // returns false, and the only thing under the target is whatever the
-      // failed copy produced (nothing from outside the snapshot tree).
-      // NOTE: rollbackFromSnapshot does NOT clean up a partial copy when
-      // there was no pre-existing config to restore — there is no original
-      // to roll back to, so this is the real, documented failure behavior.
-      for (const k of treeKeys(OPENCLAW_DIR)) {
-        // Everything present under the target must trace back to the copy
-        // dest, never to an unrelated path.
-        expect(k.startsWith(OPENCLAW_DIR)).toBe(true);
-      }
+      // With no pre-existing config there is no archive to restore, so recovery
+      // is a no-op and whatever cpSync wrote stays. Nothing was overwritten, so
+      // a partial fresh restore is the worst case. Assert the EXACT contents —
+      // treeKeys() only returns keys under OPENCLAW_DIR, so the old
+      // `startsWith()` loop could never fail; this catches any external leak.
+      expect(treeKeys(OPENCLAW_DIR).sort()).toEqual(
+        [OPENCLAW_DIR, `${OPENCLAW_DIR}/partial.json`].sort(),
+      );
       // The snapshot source is untouched by the failure.
       expect(store.get(`${SNAP}/openclaw/openclaw.json`)?.content).toBe('{"restored":true}');
     });
@@ -216,12 +218,13 @@ describe("snapshot atomicity / safety", () => {
 
       const fsMod = await import("node:fs");
       const { cpSync } = vi.mocked(fsMod);
-      // cpSync writes a partial child into the target before throwing. The
-      // archive rename already moved the original out, so the target dir
-      // key itself is still absent — the recovery guard
-      // (`existsSync(archivePath) && !existsSync(OPENCLAW_DIR)`) holds and
-      // the archived original is renamed back into place.
+      // Model a REAL cpSync partial failure: it creates the target directory
+      // first, writes a child, then dies. This is the case the old recovery
+      // guard (`!existsSync(OPENCLAW_DIR)`) mishandled — with the target dir
+      // now present it would skip recovery and strand the original in the
+      // archive. The fixed recovery removes the partial target and restores.
       cpSync.mockImplementationOnce((_src: string, dest: string) => {
+        store.set(dest, { type: "dir" });
         store.set(`${dest}/partial.json`, { type: "file", content: "partial" });
         throw new Error("EIO");
       });
@@ -231,8 +234,9 @@ describe("snapshot atomicity / safety", () => {
 
       // The original config was rolled back into the target — not lost.
       expect(store.get(`${OPENCLAW_DIR}/openclaw.json`)?.content).toBe('{"original":true}');
-      // The archive was consumed by the recovery rename (renamed back),
-      // so no dangling archive directory is left behind.
+      // The half-written partial was cleaned up (not left alongside the original).
+      expect(store.get(`${OPENCLAW_DIR}/partial.json`)).toBeUndefined();
+      // The archive was consumed by the recovery rename, so nothing dangles.
       expect(archivedKey()).toBeUndefined();
     });
 
@@ -351,10 +355,13 @@ describe("snapshot atomicity / safety", () => {
 
       expect(rollbackFromSnapshot(SNAP)).toBe(true);
 
-      // The restore wrote ONLY paths under the target tree.
-      for (const k of treeKeys(OPENCLAW_DIR)) {
-        expect(k.startsWith(OPENCLAW_DIR)).toBe(true);
-      }
+      // The restore copied exactly the snapshot's entries under the target and
+      // nothing else. (treeKeys only returns keys under OPENCLAW_DIR, so the old
+      // `startsWith()` loop could never fail; assert the concrete tree so a
+      // dereferenced /etc/shadow copy would show up as an unexpected key.)
+      expect(treeKeys(OPENCLAW_DIR).sort()).toEqual(
+        [OPENCLAW_DIR, `${OPENCLAW_DIR}/evil-link`, `${OPENCLAW_DIR}/openclaw.json`].sort(),
+      );
 
       // The link was copied as a symlink entry (preserving the type), not
       // dereferenced into a copy of /etc/shadow's contents.

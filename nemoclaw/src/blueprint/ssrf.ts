@@ -10,6 +10,7 @@ interface CidrRange {
 }
 
 const PRIVATE_NETWORKS: CidrRange[] = [
+  cidr("0.0.0.0", 8), // "this host" — 0.0.0.0 routes to localhost on Linux
   cidr("127.0.0.0", 8),
   cidr("10.0.0.0", 8),
   cidr("172.16.0.0", 12),
@@ -17,7 +18,8 @@ const PRIVATE_NETWORKS: CidrRange[] = [
   cidr("169.254.0.0", 16),
   cidr("100.64.0.0", 10), // RFC 6598 CGNAT (shared address space)
   cidr6("::1", 128),
-  cidr6("fd00::", 8),
+  cidr6("fc00::", 7), // ULA — fc00::/7 covers both fc00::/8 and fd00::/8
+  cidr6("fe80::", 10), // IPv6 link-local
 ];
 
 const ALLOWED_SCHEMES = new Set(["https:", "http:"]);

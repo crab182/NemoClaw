@@ -19,6 +19,7 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -126,8 +127,16 @@ export function rollbackFromSnapshot(snapshotDir: string): boolean {
     cpSync(source, OPENCLAW_DIR, { recursive: true });
     return true;
   } catch {
-    // Restore archived config if copy failed so the host isn't left without .openclaw
-    if (archivePath !== null && existsSync(archivePath) && !existsSync(OPENCLAW_DIR)) {
+    // Copy failed. Restore the archived original so the host is never left
+    // without (or with a half-written) ~/.openclaw. The previous guard only
+    // restored when OPENCLAW_DIR did NOT exist, but a real cpSync creates the
+    // target directory before it fails partway — leaving a partial dir that
+    // made the guard skip recovery and strand the original in the archive.
+    // Remove any partial target first, then rename the archive back.
+    if (archivePath !== null && existsSync(archivePath)) {
+      if (existsSync(OPENCLAW_DIR)) {
+        rmSync(OPENCLAW_DIR, { recursive: true, force: true });
+      }
       renameSync(archivePath, OPENCLAW_DIR);
     }
     return false;

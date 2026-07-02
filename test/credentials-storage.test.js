@@ -82,12 +82,17 @@ describe("credential file permission hardening", () => {
 });
 
 describe("unsafe HOME rejection", () => {
-  it.each(["/tmp", "/"])("refuses to store credentials when HOME is %s", async (unsafe) => {
-    const creds = await importWithHome(unsafe);
-    expect(() => creds.saveCredential("NVIDIA_API_KEY", "nvapi-x")).toThrow(
-      /world-readable/,
-    );
-  });
+  // NB: the guard is a KNOWN-unsafe-path allow-list (UNSAFE_HOME_PATHS), not a
+  // filesystem-mode check — cover every entry so dropping one is caught.
+  it.each(["/tmp", "/var/tmp", "/dev/shm", "/"])(
+    "refuses to store credentials when HOME is a known-unsafe path (%s)",
+    async (unsafe) => {
+      const creds = await importWithHome(unsafe);
+      expect(() => creds.saveCredential("NVIDIA_API_KEY", "nvapi-x")).toThrow(
+        /world-readable/,
+      );
+    },
+  );
 
   it("rejects a HOME symlink that resolves to a world-readable location", async () => {
     const base = mkSafeHome();
