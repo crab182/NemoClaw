@@ -18,7 +18,7 @@
 // (2) a single answer mixing public and private records is rejected because
 // the validator checks *all* returned addresses.
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 
 type LookupResult = Array<{ address: string; family: number }>;
 const mockLookup = vi.fn<(hostname: string, options: { all: true }) => Promise<LookupResult>>();
@@ -34,6 +34,13 @@ const PUBLIC = "93.184.216.34";
 function rec(address: string, family = 4): { address: string; family: number } {
   return { address, family };
 }
+
+// Reset the shared lookup mock between tests so queued mockResolvedValueOnce
+// values and call counts can't leak across cases (removes the prior reliance on
+// exact queue consumption ordering).
+beforeEach(() => {
+  mockLookup.mockReset();
+});
 
 // ── Resolve-then-pivot (sequential rebinding) ───────────────────────
 
@@ -129,4 +136,24 @@ describe("DNS rebinding: mixed public + private in one answer", () => {
     const url = "https://multi.legit.example/v1";
     await expect(validateEndpointUrl(url)).resolves.toBe(url);
   });
+});
+
+// ── Native IPv6 and additional bogon ranges ─────────────────────────
+// The rebinding cases above only ever feed IPv4 (or IPv4-mapped) addresses, so
+// the native IPv6 CIDRs and the this-host/link-local ranges had no coverage:
+// deleting one of them from PRIVATE_NETWORKS would leave the suite green.
+
+describe("native IPv6 and additional bogon ranges are rejected", () => {
+  async function expectRejected(ip: string, family: number): Promise<void> {
+    mockLookup.mockResolvedValue([rec(ip, family)]);
+    await expect(validateEndpointUrl("https://target.example/v1")).rejects.toThrow(
+      /private\/internal address/,
+    );
+  }
+
+  it("rejects IPv6 loopback ::1", () => expectRejected("::1", 6));
+  it("rejects ULA fd00::/8", () => expectRejected("fd12:3456::1", 6));
+  it("rejects ULA fc00::/8 (lower half)", () => expectRejected("fc00::1", 6));
+  it("rejects IPv6 link-local fe80::/10", () => expectRejected("fe80::1", 6));
+  it("rejects this-host 0.0.0.0", () => expectRejected("0.0.0.0", 4));
 });
