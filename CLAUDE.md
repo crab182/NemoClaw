@@ -129,6 +129,10 @@ All hooks managed by [prek](https://prek.j178.dev/) (installed via `npm install`
 
 - Follow style guide in `docs/CONTRIBUTING.md`
 
+## Keeping This File Current
+
+When the user provides a correction in any session (task, Cowork thread, or code session), record the corrected guidance in this CLAUDE.md in the same session so future sessions inherit it.
+
 ## PR Requirements
 
 - Create feature branch from `main`
