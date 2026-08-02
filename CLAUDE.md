@@ -131,7 +131,7 @@ All hooks managed by [prek](https://prek.j178.dev/) (installed via `npm install`
 
 ## Keeping This File Current
 
-When the user provides a correction in any session (task, Cowork thread, or code session), record the corrected guidance in this CLAUDE.md in the same session so future sessions inherit it.
+When the user provides a correction in any session (task, Cowork thread, or code session), record the corrected guidance in this CLAUDE.md in the same session so future sessions inherit it. Record only durable, project-wide guidance — never session-specific details or sensitive information.
 
 ## PR Requirements
 
