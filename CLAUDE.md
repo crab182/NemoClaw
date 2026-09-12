@@ -6,59 +6,24 @@ NVIDIA NemoClaw is an open-source reference stack for running [OpenClaw](https:/
 
 **Status:** Alpha (March 2026+). Interfaces may change without notice.
 
-## Architecture
+## Setup
 
-| Path | Language | Purpose |
-|------|----------|---------|
-| `bin/` | JavaScript (CJS) | CLI entry point (`nemoclaw.js`) and library modules |
-| `bin/lib/` | JavaScript (CJS) | Core CLI logic: onboard, credentials, inference, policies, preflight, runner |
-| `nemoclaw/` | TypeScript | Plugin project (Commander CLI extension for OpenClaw) |
-| `nemoclaw/src/blueprint/` | TypeScript | Runner, snapshot, SSRF validation, state management |
-| `nemoclaw/src/commands/` | TypeScript | Slash commands, migration state |
-| `nemoclaw/src/onboard/` | TypeScript | Onboarding config |
-| `nemoclaw-blueprint/` | YAML | Blueprint definition and network policies |
-| `scripts/` | Bash/JS/TS | Install helpers, setup, automation, E2E tooling |
-| `test/` | JavaScript (ESM) | Root-level integration tests (Vitest) |
-| `test/e2e/` | Bash/JS | End-to-end tests (Brev cloud instances) |
-| `docs/` | Markdown (MyST) | User-facing docs (Sphinx) |
-| `k8s/` | YAML | Kubernetes deployment manifests |
-
-## Development Commands
+Three sub-projects; install in this order:
 
 ```bash
-# Install dependencies
-npm install                              # root deps (OpenClaw + CLI)
+npm install                                           # root deps (OpenClaw + CLI)
 cd nemoclaw && npm install && npm run build && cd ..  # TypeScript plugin
 cd nemoclaw-blueprint && uv sync && cd ..             # Python deps
-
-# Build
-cd nemoclaw && npm run build      # compile TypeScript plugin
-cd nemoclaw && npm run dev        # watch mode
-
-# Test
-npm test                          # root-level tests (Vitest)
-cd nemoclaw && npm test           # plugin unit tests (Vitest)
-
-# Lint / check
-make check                        # all linters via prek (pre-commit hooks)
-npx prek run --all-files          # same as make check
-npm run typecheck:cli             # type-check CLI (bin/, scripts/)
-
-# Format
-make format                       # auto-format TypeScript
-
-# Docs
-make docs                         # build docs (Sphinx/MyST)
-make docs-live                    # serve locally with auto-rebuild
 ```
 
-## Test Structure
-
-- **Root tests** (`test/*.test.js`): Integration tests run via Vitest (ESM)
-- **Plugin tests** (`nemoclaw/src/**/*.test.ts`): Unit tests co-located with source
-- **E2E tests** (`test/e2e/`): Cloud-based E2E on Brev instances, triggered only when `BREV_API_TOKEN` is set
-
-Vitest config (`vitest.config.ts`) defines three projects: `cli`, `plugin`, and `e2e-brev`.
+Build/test/lint/docs targets are in the `Makefile` and `package.json`
+scripts. Git hooks are managed by prek (installed by `npm install`).
+`make check` runs only the pre-commit-stage hooks (linters, formatters,
+plugin unit tests); the TypeScript type checks and the package.json ↔
+git-tag version check are pre-push-stage hooks, so before opening a PR
+also run `npx prek run --all-files --stage pre-push` — that is what CI
+runs. E2E tests (`test/e2e/`) run only when `BREV_API_TOKEN` is set —
+they skip silently otherwise.
 
 ## Code Style and Conventions
 
@@ -71,17 +36,6 @@ Conventional Commits required. Enforced by commitlint via prek `commit-msg` hook
 ```
 
 Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `ci`, `perf`, `merge`
-
-### SPDX Headers
-
-Every source file must include an SPDX license header. The pre-commit hook auto-inserts them:
-
-```javascript
-// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-// SPDX-License-Identifier: Apache-2.0
-```
-
-For shell scripts use `#` comments. For Markdown use HTML comments.
 
 ### JavaScript
 
@@ -106,16 +60,6 @@ For shell scripts use `#` comments. For Markdown use HTML comments.
 ### No External Project Links
 
 Do not add links to third-party code repositories, community collections, or unofficial resources. Links to official tool documentation (Node.js, Python, uv) are acceptable.
-
-## Git Hooks (prek)
-
-All hooks managed by [prek](https://prek.j178.dev/) (installed via `npm install`):
-
-| Hook | What runs |
-|------|-----------|
-| **pre-commit** | File fixers, formatters, linters, Vitest (plugin) |
-| **commit-msg** | commitlint (Conventional Commits) |
-| **pre-push** | TypeScript type check (tsc --noEmit for plugin, JS, CLI) |
 
 ## Documentation
 
