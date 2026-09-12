@@ -17,9 +17,13 @@ cd nemoclaw-blueprint && uv sync && cd ..             # Python deps
 ```
 
 Build/test/lint/docs targets are in the `Makefile` and `package.json`
-scripts. Git hooks are managed by prek (installed by `npm install`);
-`make check` runs them all. E2E tests (`test/e2e/`) run only when
-`BREV_API_TOKEN` is set — they skip silently otherwise.
+scripts. Git hooks are managed by prek (installed by `npm install`).
+`make check` runs only the pre-commit-stage hooks (linters, formatters,
+plugin unit tests); the TypeScript type checks and the package.json ↔
+git-tag version check are pre-push-stage hooks, so before opening a PR
+also run `npx prek run --all-files --stage pre-push` — that is what CI
+runs. E2E tests (`test/e2e/`) run only when `BREV_API_TOKEN` is set —
+they skip silently otherwise.
 
 ## Code Style and Conventions
 
